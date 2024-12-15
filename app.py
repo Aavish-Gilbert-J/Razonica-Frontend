@@ -50,7 +50,7 @@ def login():
             if username and password:
                 with st.spinner("Authenticating..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post(' https://6ef5-116-73-245-216.ngrok-free.app/login', json=data)
+                    response = requests.post('https://dev.razonica.in/login', json=data)
                     if response.status_code == 200:
                         st.success("Login successful! Redirecting...")
                         st.session_state['token'] = response.json()['token']
@@ -88,7 +88,7 @@ def signup():
                 
                 with st.spinner("Creating your account..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post(' https://6ef5-116-73-245-216.ngrok-free.app/register', json=data)
+                    response = requests.post('https://dev.razonica.in/register', json=data)
                     if response.status_code == 201:
                         st.success("Account created successfully! Please login.")
                     else:
@@ -108,7 +108,7 @@ def display_files():
 
     # Get the list of files and their statuses from the server
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-    response = requests.get(' https://6ef5-116-73-245-216.ngrok-free.app/list_uploaded_files', headers=headers)
+    response = requests.get('https://dev.razonica.in/list_uploaded_files', headers=headers)
     if response.status_code == 200:
         files_data = response.json().get('files', [])
         if st.button("Refresh", key="refresh_files"):
@@ -143,7 +143,7 @@ def display_status():
 
     # Get the list of files from the server
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-    response = requests.get(' https://6ef5-116-73-245-216.ngrok-free.app/list_uploaded_files', headers=headers)
+    response = requests.get('https://dev.razonica.in/list_uploaded_files', headers=headers)
     if response.status_code == 200:
         files_data = response.json().get('files', [])
         if st.button("Refresh", key="refresh_status"):
@@ -165,7 +165,7 @@ def display_status():
                         'Authorization': 'Bearer ' + st.session_state['token'],
                         'Content-Type': 'application/json'
                     }
-                    delete_response = requests.post(' https://6ef5-116-73-245-216.ngrok-free.app/delete_upload', headers=headers, json=data)
+                    delete_response = requests.post('https://dev.razonica.in/delete_upload', headers=headers, json=data)
                     if delete_response.status_code == 200:
                         st.success(f"Deleted {filename}")
                         st.rerun()
@@ -189,7 +189,7 @@ def generate_response(prompt, options):
         "files": options
     }
     try:
-        run_response = requests.post(' https://6ef5-116-73-245-216.ngrok-free.app/run_excel_agent', 
+        run_response = requests.post('https://dev.razonica.in/run_excel_agent', 
                                    headers=headers, 
                                    json=payload,
                                    timeout=180)  # 3 minutes timeout
@@ -334,7 +334,7 @@ def main():
             <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>
         </head>
         <body>
-            <form action=" https://6ef5-116-73-245-216.ngrok-free.app/upload" class="dropzone" id="fileDropzone">
+            <form action="https://dev.razonica.in/upload" class="dropzone" id="fileDropzone">
                 <div class="dz-message">
                     Drag and drop files here or click to upload.
                 </div>
@@ -375,7 +375,7 @@ def main():
                                 this.removeFile(file);
 
                                 // Send a POST request to the server to delete the file
-                                fetch(' https://6ef5-116-73-245-216.ngrok-free.app/delete', {{
+                                fetch('https://dev.razonica.in/delete', {{
                                     method: 'POST',
                                     headers: {{
                                         'Content-Type': 'application/json',
@@ -425,7 +425,7 @@ def main():
 
             # Fetch user-specific files when the page loads (inside the main() function, after confirming user is logged in)
             headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-            response = requests.get(' https://6ef5-116-73-245-216.ngrok-free.app/get_user_files', headers=headers)
+            response = requests.get('https://dev.razonica.in/get_user_files', headers=headers)
             if response.status_code == 200:
                 files_data = response.json().get('files', [])
                 options = st.multiselect(
