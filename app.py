@@ -223,8 +223,8 @@ def main():
             # Create a styled option menu in the sidebar
             page = option_menu(
             "Menu Options", 
-            ["Home", "Data Insights", "Page 1"],  
-            icons=['house', 'file-text', 'file-text'], 
+            ["Home", "Data Insights"],  
+            icons=['house', 'file-text'], 
             menu_icon="list",
             styles={
                 "container": {"padding": "0!important", "background-color": "transparent"},
@@ -491,8 +491,7 @@ def main():
             )
 
 
-        elif page == "Page 1":
-            st.write("Content for 1 goes here.")
+      
             
 
     else:
