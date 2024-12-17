@@ -50,6 +50,7 @@ def login():
             if username and password:
                 with st.spinner("Authenticating..."):
                     data = {'username': username, 'password': password}
+                    response = requests.post('https://4e82-116-73-245-216.ngrok-free.app/login', json=data)
                     response = requests.post('https://dev.razonica.in/login', json=data)
                     if response.status_code == 200:
                         st.success("Login successful! Redirecting...")
