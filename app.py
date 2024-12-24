@@ -50,7 +50,6 @@ def login():
             if username and password:
                 with st.spinner("Authenticating..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post('https://4e82-116-73-245-216.ngrok-free.app/login', json=data)
                     response = requests.post('https://dev.razonica.in/login', json=data)
                     if response.status_code == 200:
                         st.success("Login successful! Redirecting...")
@@ -187,13 +186,16 @@ def generate_response(prompt, options):
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
     payload = {
         "query": prompt,
-        "files": options
+        "files": options,
+        "history": st.session_state['messages'],  # pass entire history
     }
     try:
-        run_response = requests.post('https://dev.razonica.in/run_excel_agent', 
-                                   headers=headers, 
-                                   json=payload,
-                                   timeout=180)  # 3 minutes timeout
+        run_response = requests.post(
+            'https://dev.razonica.in/run_aicore', 
+            headers=headers, 
+            json=payload,
+            timeout=180
+        )
         if run_response.status_code == 200:
             final_answer = run_response.json().get('answer', '')
             return final_answer
@@ -210,7 +212,7 @@ def main():
         # Create a header with logout button at the top right
         header_cols = st.columns([8, 1])
         with header_cols[0]:
-            st.title("DataDash - AI Powered Business Insights - deployed")
+            st.title("DataDash - AI Powered Business Insights")
    
         with header_cols[1]:
             st.write("")  # Placeholder
@@ -446,7 +448,7 @@ def main():
                 prompt = st.chat_input("Type your message here...")
             with col2:
                 if st.button("Clear Chat"):
-                    st.session_state.messages = []
+                    st.session_state['messages'] = []
                     st.rerun()
 
             
