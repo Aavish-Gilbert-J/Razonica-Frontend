@@ -5,6 +5,9 @@ from streamlit_option_menu import option_menu
 import time
 import requests
 import json
+import base64
+import tempfile
+import os
 
 # Streamlit app configuration
 st.set_page_config(layout="wide")
@@ -50,7 +53,7 @@ def login():
             if username and password:
                 with st.spinner("Authenticating..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post('https://dev.razonica.in/login', json=data)
+                    response = requests.post('http://127.0.0.1:5000/login', json=data)
                     if response.status_code == 200:
                         st.success("Login successful! Redirecting...")
                         st.session_state['token'] = response.json()['token']
@@ -88,7 +91,7 @@ def signup():
                 
                 with st.spinner("Creating your account..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post('https://dev.razonica.in/register', json=data)
+                    response = requests.post('http://127.0.0.1:5000/register', json=data)
                     if response.status_code == 201:
                         st.success("Account created successfully! Please login.")
                     else:
@@ -108,7 +111,7 @@ def display_files():
 
     # Get the list of files and their statuses from the server
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-    response = requests.get('https://dev.razonica.in/list_uploaded_files', headers=headers)
+    response = requests.get('http://127.0.0.1:5000/list_uploaded_files', headers=headers)
     if response.status_code == 200:
         files_data = response.json().get('files', [])
         if st.button("Refresh", key="refresh_files"):
@@ -143,7 +146,7 @@ def display_status():
 
     # Get the list of files from the server
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-    response = requests.get('https://dev.razonica.in/list_uploaded_files', headers=headers)
+    response = requests.get('http://127.0.0.1:5000/list_uploaded_files', headers=headers)
     if response.status_code == 200:
         files_data = response.json().get('files', [])
         if st.button("Refresh", key="refresh_status"):
@@ -165,7 +168,7 @@ def display_status():
                         'Authorization': 'Bearer ' + st.session_state['token'],
                         'Content-Type': 'application/json'
                     }
-                    delete_response = requests.post('https://dev.razonica.in/delete_upload', headers=headers, json=data)
+                    delete_response = requests.post('http://127.0.0.1:5000/delete_upload', headers=headers, json=data)
                     if delete_response.status_code == 200:
                         st.success(f"Deleted {filename}")
                         st.rerun()
@@ -187,24 +190,38 @@ def generate_response(prompt, options):
     payload = {
         "query": prompt,
         "files": options,
-        "history": st.session_state['messages'],  # pass entire history
+        "history": st.session_state['messages'],
+        "graph_mode": st.session_state['graph_mode']  
     }
     try:
         run_response = requests.post(
-            'https://dev.razonica.in/run_aicore', 
+            'http://127.0.0.1:5000/run_aicore', 
             headers=headers, 
             json=payload,
             timeout=180
         )
         if run_response.status_code == 200:
             final_answer = run_response.json().get('answer', '')
-            return final_answer
+            image_b64 = run_response.json().get('image', None)
+
+           # If we have an image in base64, decode & save to temp file
+            image_path = None
+            if image_b64:
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                        tmp.write(base64.b64decode(image_b64))
+                        image_path = tmp.name
+                except Exception as e:
+                    image_path = None
+            # Return both final_answer and the local path to the saved image
+            return final_answer, image_path
+
         else:
-            return f"Error: Server returned status code {run_response.status_code}"
+            return f"Error: Server returned status code {run_response.status_code}", None
     except requests.Timeout:
-        return "Error: Request timed out. The server is taking too long to respond."
+        return "Error: Request timed out. The server is taking too long to respond.", None
     except requests.RequestException as e:
-        return f"Error: Connection failed - {str(e)}"
+        return f"Error: Connection failed - {str(e)}", None
 
 def main():
     if st.session_state['token']:
@@ -337,7 +354,7 @@ def main():
             <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>
         </head>
         <body>
-            <form action="https://dev.razonica.in/upload" class="dropzone" id="fileDropzone">
+            <form action="http://127.0.0.1:5000/upload" class="dropzone" id="fileDropzone">
                 <div class="dz-message">
                     Drag and drop files here or click to upload.
                 </div>
@@ -378,7 +395,7 @@ def main():
                                 this.removeFile(file);
 
                                 // Send a POST request to the server to delete the file
-                                fetch('https://dev.razonica.in/delete', {{
+                                fetch('http://127.0.0.1:5000/delete', {{
                                     method: 'POST',
                                     headers: {{
                                         'Content-Type': 'application/json',
@@ -422,13 +439,15 @@ def main():
         elif page == "Data Insights":
             if "messages" not in st.session_state:
                 st.session_state.messages = []
+            if 'graph_mode' not in st.session_state:
+                st.session_state['graph_mode'] = False
 
             # Create a container for chat history
             chat_container = st.container()
 
             # Fetch user-specific files when the page loads (inside the main() function, after confirming user is logged in)
             headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-            response = requests.get('https://dev.razonica.in/get_user_files', headers=headers)
+            response = requests.get('http://127.0.0.1:5000/get_user_files', headers=headers)
             if response.status_code == 200:
                 files_data = response.json().get('files', [])
                 options = st.multiselect(
@@ -441,6 +460,8 @@ def main():
                 options = []
 
             
+            graph_mode = st.checkbox("Generate Graphs with answers?", value=False)
+            st.session_state['graph_mode'] = graph_mode
 
             # Display chat input and clear button
             col1, col2 = st.columns([6, 1])
@@ -469,18 +490,29 @@ def main():
                  
                     # Generate assistant's response
                     with st.spinner("Thinking..."):
-                        response = generate_response(prompt, options)  # Generate Markdown content here
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                     
+                        answer_text, image_path = generate_response(prompt, options)
+                    # Display assistant's response
+                    st.session_state.messages.append({"role": "assistant", "content": answer_text})
+
 
                     with st.chat_message("assistant"):
                         # Display response as Markdown
                         message_placeholder = st.empty()
-                        for i in range(len(response)):
+                        for i in range(len(answer_text)):
+                            partial_text = answer_text[: i + 1]
                             message_placeholder.markdown(
-                                f"<div class='assistant-message'>🤖 {response[:i+1]}</div>",
-                                unsafe_allow_html=True
+                                f"<div class='assistant-message'>🤖 {partial_text}</div>",
+                                unsafe_allow_html=True,
                             )
                             time.sleep(0.00000000000002)
+
+                    if image_path and os.path.exists(image_path):
+                        with st.spinner("Loading image..."):
+                            st.image(image_path, caption="Generated Chart", use_container_width =True)
+
+                    
+                       
 
             # Automatically scroll to the bottom
             st.markdown(
