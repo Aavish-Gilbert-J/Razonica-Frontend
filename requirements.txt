@@ -199,6 +199,7 @@ python-ulid==3.0.0
 pytz==2024.1
 pytzdata==2020.1
 pyufunc==0.3.7
+pywin32==307
 PyYAML==6.0.2
 RapidFuzz==3.10.1
 referencing==0.35.1
@@ -228,6 +229,7 @@ sortedcontainers==2.4.0
 soupsieve==2.6
 SQLAlchemy==2.0.35
 sqlalchemy-bigquery==1.12.0
+st-pydantic==0.3.1
 starlette==0.41.3
 statsmodels==0.14.4
 streamlit==1.40.1
