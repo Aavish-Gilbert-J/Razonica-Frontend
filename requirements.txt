@@ -199,7 +199,6 @@ python-ulid==3.0.0
 pytz==2024.1
 pytzdata==2020.1
 pyufunc==0.3.7
-pywin32==307
 PyYAML==6.0.2
 RapidFuzz==3.10.1
 referencing==0.35.1
