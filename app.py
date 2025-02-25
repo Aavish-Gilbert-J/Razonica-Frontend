@@ -1,18 +1,51 @@
 import streamlit as st
 import requests
-from streamlit_option_menu import option_menu
-import time
 import json
 import base64
-import tempfile
 import os
+import time
+import matplotlib.pyplot as plt
+import random
+from streamlit_option_menu import option_menu
 
-# Initialize session state
-if 'token' not in st.session_state:
-    st.session_state['token'] = None
+# ---------------------------
+# Configuration
+# ---------------------------
+API_BASE = "https://dev.razonica.in"
 
+# ---------------------------
+# Session State Initialization
+# ---------------------------
+if "token" not in st.session_state:
+    st.session_state["token"] = None
+if "conversations" not in st.session_state:
+    # Each item: {"user_message": str, "agent_replies": [{"agent": "AiCore"/"WebAgent"/"GraphAgent", "content": str, "type": "text"/"graph"}]}
+    st.session_state["conversations"] = []
+if "rendered_count" not in st.session_state:
+    st.session_state["rendered_count"] = 0
+
+# For demonstration (Graph placeholders), storing random data
+if "demo_graph_data" not in st.session_state:
+    st.session_state["demo_graph_data"] = [random.randint(1, 10) for _ in range(4)]
+if "generated_graph_code" not in st.session_state:
+    st.session_state["generated_graph_code"] = ""
+
+# ---------------------------
+# Utility to animate text
+# ---------------------------
+def animate_text(full_text, placeholder):
+    """Gradually renders text character by character."""
+    typed_text = ""
+    for ch in full_text:
+        typed_text += ch
+        placeholder.markdown(typed_text)
+
+# ---------------------------
+# Helper functions for login, signup, logout
+# ---------------------------
 def login():
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         .stTextInput > div > div > input {
             background-color: rgba(255, 255, 255, 0.1);
@@ -29,26 +62,24 @@ def login():
             box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
         }
         </style>
-    """, unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1,2,1])
+        """,
+        unsafe_allow_html=True
+    )
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        username = st.text_input("📧 Email or Username", key='login_username', 
-                                 placeholder="Enter your email or username")
-        password = st.text_input("🔒 Password", type="password", key='login_password', 
-                                 placeholder="Enter your password")
-
+        username = st.text_input("📧 Email or Username", key='login_username', placeholder="Enter your email or username")
+        password = st.text_input("🔒 Password", type="password", key='login_password', placeholder="Enter your password")
         remember = st.checkbox("Remember me", value=True)
-
         if st.button("Sign In"):
             if username and password:
                 with st.spinner("Authenticating..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post('https://dev.razonica.in/login', json=data)
-                    if response.status_code == 200:
+                    resp = requests.post(f"{API_BASE}/login", json=data)
+                    if resp.status_code == 200:
                         st.success("Login successful! Redirecting...")
-                        st.session_state['token'] = response.json()['token']
-                        st.session_state['messages'] = []
+                        st.session_state['token'] = resp.json()['token']
+                        st.session_state["conversations"] = []
+                        st.session_state["rendered_count"] = 0
                         st.rerun()
                     else:
                         st.error("Invalid credentials. Please try again.")
@@ -56,18 +87,12 @@ def login():
                 st.warning("Please enter both username and password")
 
 def signup():
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        username = st.text_input("📧 Email or Username", key='signup_username', 
-                                 placeholder="Enter your email or username")
-        password = st.text_input("🔒 Password", type="password", key='signup_password', 
-                                 placeholder="Choose a strong password")
-        confirm_password = st.text_input("🔒 Confirm Password", type="password", 
-                                         key='confirm_password', 
-                                         placeholder="Confirm your password")
-
+        username = st.text_input("📧 Email or Username", key='signup_username', placeholder="Enter your email or username")
+        password = st.text_input("🔒 Password", type="password", key='signup_password', placeholder="Choose a strong password")
+        confirm_password = st.text_input("🔒 Confirm Password", type="password", key='confirm_password', placeholder="Confirm your password")
         terms = st.checkbox("I agree to the Terms of Service and Privacy Policy")
-
         if st.button("Create Account"):
             if username and password and confirm_password:
                 if password != confirm_password:
@@ -76,27 +101,30 @@ def signup():
                 if not terms:
                     st.error("Please accept the Terms of Service")
                     return
-
                 with st.spinner("Creating your account..."):
                     data = {'username': username, 'password': password}
-                    response = requests.post('https://dev.razonica.in/register', json=data)
-                    if response.status_code == 201:
+                    resp = requests.post(f"{API_BASE}/register", json=data)
+                    if resp.status_code == 201:
                         st.success("Account created successfully! Please login.")
                     else:
-                        st.error(response.json().get('message', 'Registration failed'))
+                        st.error(resp.json().get('message', 'Registration failed'))
             else:
                 st.warning("Please fill in all fields")
 
 def logout():
     st.session_state['token'] = None
-    st.session_state['messages'] = []
+    st.session_state["conversations"] = []
+    st.session_state["rendered_count"] = 0
     st.success("Logged out")
     st.rerun()
 
+# ---------------------------
+# Display File Management
+# ---------------------------
 def display_files():
     st.subheader("Uploaded Files")
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-    response = requests.get('https://dev.razonica.in/list_uploaded_files', headers=headers)
+    response = requests.get(f"{API_BASE}/list_uploaded_files", headers=headers)
     if response.status_code == 200:
         files_data = response.json().get('files', [])
         if st.button("Refresh", key="refresh_files"):
@@ -127,7 +155,7 @@ def display_files():
 def display_status():
     st.subheader("Status of Uploaded Files")
     headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-    response = requests.get('https://dev.razonica.in/list_uploaded_files', headers=headers)
+    response = requests.get(f"{API_BASE}/list_uploaded_files", headers=headers)
     if response.status_code == 200:
         files_data = response.json().get('files', [])
         if st.button("Refresh", key="refresh_status"):
@@ -142,18 +170,18 @@ def display_status():
                 col2.write(status)
                 if col3.button("Delete", key=f"delete_{upload_id}"):
                     data = {'upload_id': upload_id}
-                    headers = {
+                    headers2 = {
                         'Authorization': 'Bearer ' + st.session_state['token'],
                         'Content-Type': 'application/json'
                     }
-                    delete_response = requests.post('https://dev.razonica.in/delete_upload', headers=headers, json=data)
+                    delete_response = requests.post(f"{API_BASE}/delete_upload", headers=headers2, json=data)
                     if delete_response.status_code == 200:
                         st.success(f"Deleted {filename}")
                         st.rerun()
                     else:
                         try:
                             error_message = delete_response.json().get('message', 'Unknown error')
-                        except:
+                        except Exception:
                             error_message = delete_response.text or 'Unknown error'
                         st.error(f"Failed to delete {filename}: {error_message}")
         else:
@@ -161,19 +189,90 @@ def display_status():
     else:
         st.error("Failed to fetch files.")
 
+# ---------------------------
+# Render Chat (with partial typing & graphs)
+# ---------------------------
+def render_chat():
+    """
+    Renders all conversation turns with st.chat_message,
+    ensuring old turns also display graphs in expanders,
+    and that new turns show the code as well.
+    """
+    for i, convo in enumerate(st.session_state["conversations"]):
+        is_new_turn = (i >= st.session_state["rendered_count"])
+
+        # (A) User message
+        with st.chat_message("user"):
+            if is_new_turn:
+                ph = st.empty()
+                animate_text(convo["user_message"], ph)
+            else:
+                st.write(convo["user_message"])
+
+        # (B) Agent replies
+        for reply in convo["agent_replies"]:
+            agent_name = reply.get("agent", "Agent")
+            content = reply.get("content", "")
+            msg_type = reply.get("type", "text")
+
+            with st.chat_message("assistant"):
+                if not is_new_turn:
+                    # OLD turn (already rendered before)
+                    if msg_type == "text":
+                        st.markdown(f"**{agent_name}:** {content}")
+                    elif msg_type == "graph":
+                        st.markdown(f"**{agent_name}** generated a graph previously:")
+                        if content.strip() == "":
+                            st.write("Graph not generated.")
+                        else:
+                            # [MODIFIED] - Execute the old graph code in an expander
+                            with st.expander("View Previous Graph"):
+                                try:
+                                    exec(content, globals())
+                                except Exception as e:
+                                    st.write(f"Error executing previous graph code: {e}")
+                    st.markdown("---")
+                else:
+                    # NEW turn
+                    if msg_type == "text":
+                        ph = st.empty()
+                        with st.spinner(f"{agent_name} is typing..."):
+                            time.sleep(1)
+                        animate_text(f"**{agent_name}:** {content}", ph)
+
+                    elif msg_type == "graph":
+                        ph = st.empty()
+                        with st.spinner(f"{agent_name} is generating a graph..."):
+                            time.sleep(2)
+                        if content.strip() == "":
+                            animate_text(f"**{agent_name}**: Graph not generated.", ph)
+                        else:
+                            # [MODIFIED] - Execute the new graph code
+                            animate_text(f"**{agent_name}** generated a graph:", ph)
+                            with st.expander("View Graph"):
+                                try:
+                                    exec(content, globals())
+                                except Exception as e:
+                                    st.write(f"Error executing graph code: {e}")
+                    st.markdown("---")
+
+    st.session_state["rendered_count"] = len(st.session_state["conversations"])
+
+# ---------------------------
+# Main Streamlit App
+# ---------------------------
 def main():
     st.set_page_config(layout="wide")
-
-    if st.session_state['token']:
-        # Header with logout
+    
+    if st.session_state["token"]:
+        # Authenticated
         header_cols = st.columns([8, 1])
         with header_cols[0]:
             st.title("DataDash - AI Powered Business Insights")
         with header_cols[1]:
-            st.write("")
             if st.button("Logout"):
                 logout()
-
+        
         with st.sidebar:
             page = option_menu(
                 "Menu Options", 
@@ -193,11 +292,13 @@ def main():
                     "nav-link-selected": {"background-color": "#ff2b2b"},
                 }
             )
-
+        
         if page == "Home":
             tab1, tab2, tab3 = st.tabs(["Upload", "Uploaded", "Status"])
+
             with tab1:
-                token = st.session_state['token']
+                # Dropzone for uploading
+                token = st.session_state["token"]
                 dropzone_html = f"""
                 <!DOCTYPE html>
                 <html lang="en">
@@ -260,7 +361,7 @@ def main():
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>
                 </head>
                 <body>
-                    <form action="https://dev.razonica.in/upload" class="dropzone" id="fileDropzone">
+                    <form action="{API_BASE}/upload" class="dropzone" id="fileDropzone">
                         <div class="dz-message">
                             Drag and drop files here or click to upload.
                         </div>
@@ -288,7 +389,7 @@ def main():
                                         e.preventDefault();
                                         e.stopPropagation();
                                         this.removeFile(file);
-                                        fetch('https://dev.razonica.in/delete', {{
+                                        fetch('{API_BASE}/delete', {{
                                             method: 'POST',
                                             headers: {{
                                                 'Content-Type': 'application/json',
@@ -330,182 +431,162 @@ def main():
                 display_status()
 
         elif page == "Data Insights":
-            if 'messages' not in st.session_state:
-                st.session_state['messages'] = []
-            if 'graph_mode' not in st.session_state:
-                st.session_state['graph_mode'] = False
-            if 'web_mode' not in st.session_state:
-                st.session_state['web_mode'] = False
-
-            chat_container = st.container()
-
-            # Fetch user files
-            headers = {'Authorization': 'Bearer ' + st.session_state['token']}
-            response = requests.get('https://dev.razonica.in/get_user_files', headers=headers)
-            if response.status_code == 200:
-                files_data = response.json().get('files', [])
-                options = st.multiselect("Select files to query", files_data, [])
+            # --------------------------
+            # Chat interface with partial typing
+            # --------------------------
+            headers_req = {'Authorization': f"Bearer {st.session_state['token']}"}
+            # Fetch user files for selection
+            file_resp = requests.get(f"{API_BASE}/get_user_files", headers=headers_req)
+            if file_resp.status_code == 200:
+                all_files_data = file_resp.json().get('files', [])
+                selected_files = st.multiselect("Select files to query", all_files_data, [])
             else:
                 st.error("Failed to fetch user files.")
-                options = []
+                selected_files = []
 
             col_cb1, col_cb2 = st.columns(2)
             with col_cb1:
-                graph_mode = st.checkbox("Generate Graphs with answers?", value=False)
+                graph_mode = st.checkbox("Generate Graph with answer?", value=False)
             with col_cb2:
                 web_mode = st.checkbox("Web Cross-Check?", value=False)
 
-            st.session_state['graph_mode'] = graph_mode
-            st.session_state['web_mode'] = web_mode
-
-            col1, col2 = st.columns([6, 1])
-            with col1:
-                prompt = st.chat_input("Type your message here...")
-            with col2:
-                if st.button("Clear Chat"):
-                    st.session_state['messages'] = []
-                    st.rerun()
-
-            # Display chat so far
+            # Render existing conversation
+            chat_container = st.container()
             with chat_container:
-                for message in st.session_state['messages']:
-                    if message["role"] == "assistant":
-                        with st.chat_message("assistant"):
-                            st.markdown(message["content"], unsafe_allow_html=True)
-                            # DECODE any base64 image
-                            if "image" in message and message["image"]:
-                                try:
-                                    decoded_image = base64.b64decode(message["image"])
-                                    st.image(decoded_image, caption="Generated Chart")
-                                except Exception as e:
-                                    st.warning(f"Could not decode chart image: {e}")
+                render_chat()
 
-                            # Show web agent output if present
-                            if "web_agent" in message and message["web_agent"]:
-                                st.markdown(
-                                    f"**WebAgent Output:**\n\n{message['web_agent']}",
-                                    unsafe_allow_html=True
-                                )
-                            
-                            if "web_agent_citations" in message and message["web_agent_citations"]:
-                                top_5_cits = message["web_agent_citations"][:5]
-                                st.markdown("**Top 5 Citations:**")
-                                for i, cit in enumerate(top_5_cits, start=1):
-                                    st.markdown(f"{i}. {cit}")
-                    else:
-                        with st.chat_message("user"):
-                            st.write(message["content"])
+            # Input form for user message
+            with st.form("chat_input_form", clear_on_submit=True):
+                user_input = st.text_input("Enter your message:")
+                submitted = st.form_submit_button("Send")
 
-            if prompt:
-                # show user message
-                with st.chat_message("user"):
-                    st.write(prompt)
-                st.session_state['messages'].append({"role": "user", "content": prompt})
+                if submitted and user_input:
+                    # (1) Append new user turn
+                    new_turn = {
+                        "user_message": user_input,
+                        "agent_replies": []
+                    }
+                    st.session_state["conversations"].append(new_turn)
 
-                # Call AiCore
-                with st.spinner("Thinking..."):
-                    payload = {
-                        "query": prompt,
-                        "files": options,
-                        "history": st.session_state['messages'],
-                        "graph_mode": st.session_state['graph_mode'],
-                        "web_mode": st.session_state['web_mode']
+                    # (2) AiCore request
+                    ai_payload = {
+                        "query": user_input,
+                        "files": selected_files,
+                        "history": st.session_state["conversations"]
                     }
                     try:
-                        run_response = requests.post(
-                            'https://dev.razonica.in/run_aicore',
-                            headers={'Authorization': 'Bearer ' + st.session_state['token']},
-                            json=payload,
-                            timeout=180
-                        )
-                        if run_response.status_code == 200:
-                            resp_json = run_response.json()
-                            final_answer = resp_json.get('answer', '')
-                            image_b64 = resp_json.get('image', None)
-                            web_data = resp_json.get('web_agent', None)
+                        with st.spinner("ExcelAgent and TextAgent are working..."):
+                            r = requests.post(
+                                f"{API_BASE}/run_aicore",
+                                headers=headers_req,
+                                json=ai_payload,
+                                timeout=180
+                            )
+                        if r.status_code == 200:
+                            aicore_result = r.json()  # e.g. {"ExcelAgent": "...", "TextAgent": "..."}
 
-                            assistant_msg = {
-                                "role": "assistant",
-                                "content": final_answer
-                            }
-                            if image_b64:
-                                assistant_msg["image"] = image_b64
-                            if web_data and isinstance(web_data, dict):
-                                assistant_msg["web_agent"] = web_data.get("openai_analysis", "")
-                                assistant_msg["web_agent_citations"] = web_data.get("perplexity_citations", [])
+                            excel_text = aicore_result.get("ExcelAgent", "")
+                            text_text = aicore_result.get("TextAgent", "")
 
-                            st.session_state['messages'].append(assistant_msg)
-
-                            # Display the assistant's response
-                            with st.chat_message("assistant"):
-                                st.markdown(final_answer, unsafe_allow_html=True)
-                                # If there's a base64 image, decode + display
-                                if image_b64:
-                                    try:
-                                        decoded_image = base64.b64decode(image_b64)
-                                        st.image(decoded_image, caption="Generated Chart")
-                                    except Exception as e:
-                                        st.warning(f"Could not decode chart image: {e}")
-
-                                if web_data and isinstance(web_data, dict):
-                                    st.markdown(
-                                        f"**WebAgent Output:**\n\n{web_data.get('openai_analysis', '')}",
-                                        unsafe_allow_html=True
-                                    )
-                                    citations = web_data.get("perplexity_citations", [])
-                                    if citations:
-                                        st.markdown("**Top 5 Citations:**")
-                                        top_5_cits = citations[:5]
-                                        for i, cit in enumerate(top_5_cits, start=1):
-                                            st.markdown(f"{i}. {cit}")
+                            # If excel text is non-empty
+                            if excel_text.strip():
+                                st.session_state["conversations"][-1]["agent_replies"].append(
+                                    {"agent": "ExcelAgent", "content": excel_text, "type": "text"}
+                                )
+                            # If text agent has content
+                            if text_text.strip():
+                                st.session_state["conversations"][-1]["agent_replies"].append(
+                                    {"agent": "TextAgent", "content": text_text, "type": "text"}
+                                )
                         else:
-                            st.error(f"Error: Server returned status code {run_response.status_code}")
+                            st.session_state["conversations"][-1]["agent_replies"].append(
+                                {"agent": "AiCore", "content": "[AiCore] Error from backend.", "type": "text"}
+                            )
+                    except Exception as exc:
+                        st.session_state["conversations"][-1]["agent_replies"].append(
+                            {"agent": "AiCore", "content": f"[AiCore] Exception: {exc}", "type": "text"}
+                        )
 
-                    except requests.Timeout:
-                        st.error("Error: Request timed out.")
-                    except requests.RequestException as e:
-                        st.error(f"Error: Connection failed - {str(e)}")
+                    # (3) Optionally call WebAgent
+                    if web_mode:
+                        try:
+                            with st.spinner("WebAgent is working..."):
+                                w_payload = {
+                                    "query": user_input,
+                                    "excel_result": aicore_result.get("ExcelAgent", "") if 'aicore_result' in locals() else "",
+                                    "history": st.session_state["conversations"]
+                                }
+                                wresp = requests.post(
+                                    f"{API_BASE}/run_web_agent",
+                                    headers=headers_req,
+                                    json=w_payload,
+                                    timeout=180
+                                )
+                            if wresp.status_code == 200:
+                                web_data = wresp.json()  # {"agent":"WebAgent","result":{...}}
+                                if "result" in web_data:
+                                    web_analysis = web_data["result"].get("openai_analysis", "")
+                                    st.session_state["conversations"][-1]["agent_replies"].append(
+                                        {"agent": "WebAgent", "content": web_analysis, "type": "text"}
+                                    )
+                            else:
+                                st.session_state["conversations"][-1]["agent_replies"].append(
+                                    {"agent": "WebAgent", "content": "[WebAgent] Error from backend.", "type": "text"}
+                                )
+                        except Exception as exc:
+                            st.session_state["conversations"][-1]["agent_replies"].append(
+                                {"agent": "WebAgent", "content": f"[WebAgent] Exception: {exc}", "type": "text"}
+                            )
 
-            # Auto scroll
-            st.markdown(
-                """
-                <script>
-                    var scrollingElement = (document.scrollingElement || document.body);
-                    scrollingElement.scrollTop = scrollingElement.scrollHeight;
-                </script>
-                """,
-                unsafe_allow_html=True
-            )
-    else:
-        st.title("DataDash - AI Powered Business Insights")
-        st.write("Please login or sign up.")
+                    # (4) Optionally call GraphAgent
+                    if graph_mode:
+                        graph_payload = {
+                            "query": user_input,
+                            "excel_result": aicore_result.get("ExcelAgent", "") if 'aicore_result' in locals() else ""
+                        }
+                        try:
+                            with st.spinner("GraphAgent is working..."):
+                                gresp = requests.post(
+                                    f"{API_BASE}/generate_streamlit_graph",
+                                    headers=headers_req,
+                                    json=graph_payload,
+                                    timeout=180
+                                )
+                            if gresp.status_code == 200:
+                                graph_code = gresp.json().get("code", "")
+                                # [MODIFIED] Save the actual code in the conversation turn, so old & new can display
+                                st.session_state["generated_graph_code"] = graph_code
+                                st.session_state["conversations"][-1]["agent_replies"].append(
+                                    {"agent": "GraphAgent", "content": graph_code, "type": "graph"}  # [MODIFIED]
+                                )
+                            else:
+                                st.session_state["conversations"][-1]["agent_replies"].append(
+                                    {"agent": "GraphAgent", "content": "[GraphAgent] Could not generate chart code.", "type": "text"}
+                                )
+                        except Exception as exc:
+                            st.session_state["conversations"][-1]["agent_replies"].append(
+                                {"agent": "GraphAgent", "content": f"[GraphAgent] Exception: {exc}", "type": "text"}
+                            )
 
-        st.markdown("""
-            <style>
-            .stTabs [data-baseweb="tab-list"] {
-                gap: 24px;
-                background-color: transparent;
-            }
-            .stTabs [data-baseweb="tab"] {
-                height: 50px;
-                padding: 10px 24px;
-                background-color: transparent;
-                border-radius: 4px;
-                font-weight: 600;
-                color: #808495;
-            }
-            .stTabs [aria-selected="true"] {
-                background-color: #262730 !important;
-                color: white !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
+                    # Rerun so the partial-typing animation is triggered for the new turn
+                    st.rerun()
 
-        tab1, tab2 = st.tabs(["Login", "Sign Up"])
-        with tab1:
-            login()
-        with tab2:
-            signup()
+            if st.button("Clear Chat"):
+                st.session_state["conversations"] = []
+                st.session_state["rendered_count"] = 0
+                st.rerun()
 
+        else:
+            # Not authenticated: show Login / Sign Up
+            st.title("DataDash - AI Powered Business Insights")
+            st.write("Please login or sign up.")
+            tab1, tab2 = st.tabs(["Login", "Sign Up"])
+            with tab1:
+                login()
+            with tab2:
+                signup()
+
+
+# Entry point
 if __name__ == '__main__':
     main()
