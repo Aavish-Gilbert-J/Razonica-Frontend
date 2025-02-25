@@ -468,6 +468,9 @@ def main():
                     }
                     st.session_state["conversations"].append(new_turn)
 
+                    # Prepare aicore_result so we can reference it even if the request fails
+                    aicore_result = {}
+
                     # (2) AiCore request
                     ai_payload = {
                         "query": user_input,
@@ -475,7 +478,7 @@ def main():
                         "history": st.session_state["conversations"]
                     }
                     try:
-                        with st.spinner("ExcelAgent and TextAgent are working..."):
+                        with st.spinner("Excel & Text Agents are working..."):
                             r = requests.post(
                                 f"{API_BASE}/run_aicore",
                                 headers=headers_req,
@@ -484,7 +487,6 @@ def main():
                             )
                         if r.status_code == 200:
                             aicore_result = r.json()  # e.g. {"ExcelAgent": "...", "TextAgent": "..."}
-
                             excel_text = aicore_result.get("ExcelAgent", "")
                             text_text = aicore_result.get("TextAgent", "")
 
@@ -513,7 +515,7 @@ def main():
                             with st.spinner("WebAgent is working..."):
                                 w_payload = {
                                     "query": user_input,
-                                    "excel_result": aicore_result.get("ExcelAgent", "") if 'aicore_result' in locals() else "",
+                                    "excel_result": aicore_result.get("ExcelAgent", ""),
                                     "history": st.session_state["conversations"]
                                 }
                                 wresp = requests.post(
@@ -542,7 +544,7 @@ def main():
                     if graph_mode:
                         graph_payload = {
                             "query": user_input,
-                            "excel_result": aicore_result.get("ExcelAgent", "") if 'aicore_result' in locals() else ""
+                            "excel_result": aicore_result.get("ExcelAgent", "")
                         }
                         try:
                             with st.spinner("GraphAgent is working..."):
@@ -554,10 +556,10 @@ def main():
                                 )
                             if gresp.status_code == 200:
                                 graph_code = gresp.json().get("code", "")
-                                # [MODIFIED] Save the actual code in the conversation turn, so old & new can display
+                                # Save the actual code in the conversation turn
                                 st.session_state["generated_graph_code"] = graph_code
                                 st.session_state["conversations"][-1]["agent_replies"].append(
-                                    {"agent": "GraphAgent", "content": graph_code, "type": "graph"}  # [MODIFIED]
+                                    {"agent": "GraphAgent", "content": graph_code, "type": "graph"}
                                 )
                             else:
                                 st.session_state["conversations"][-1]["agent_replies"].append(
@@ -576,16 +578,15 @@ def main():
                 st.session_state["rendered_count"] = 0
                 st.rerun()
 
-        else:
-            # Not authenticated: show Login / Sign Up
-            st.title("DataDash - AI Powered Business Insights")
-            st.write("Please login or sign up.")
-            tab1, tab2 = st.tabs(["Login", "Sign Up"])
-            with tab1:
-                login()
-            with tab2:
-                signup()
-
+    else:
+        # Not authenticated: show Login / Sign Up
+        st.title("DataDash - AI Powered Business Insights")
+        st.write("Please login or sign up.")
+        tab1, tab2 = st.tabs(["Login", "Sign Up"])
+        with tab1:
+            login()
+        with tab2:
+            signup()
 
 # Entry point
 if __name__ == '__main__':
